@@ -1,10 +1,10 @@
 "use server";
 
 import { NextRequest, NextResponse } from 'next/server';
-import cv2 from 'cv2';
-import numpy from 'numpy';
-import json from 'json';
-from ultralytics import YOLO;
+// import cv2 from 'cv2';  // cv2 and numpy are not directly usable in a Next.js server component without additional configuration.
+// import numpy from 'numpy';
+// import json from 'json';
+import YOLO from 'ultralytics'
 
 // Placeholder: Load YOLO model
 // In a real implementation, ensure the model is correctly loaded.
