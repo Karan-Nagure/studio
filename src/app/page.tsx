@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface BulletData {
   bullet_id: string;
@@ -22,6 +23,29 @@ export default function Home() {
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5);
   const [iouThreshold, setIouThreshold] = useState<number>(0.5);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [processing, setProcessing] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasCameraPermission, setHasCameraPermission] = useState(false);
+
+  useEffect(() => {
+    const getCameraPermission = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({video: true});
+        setHasCameraPermission(true);
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err: any) {
+        console.error('Error accessing camera:', err);
+        setHasCameraPermission(false);
+        setError('Camera Access Denied: Please enable camera permissions in your browser settings to use this app.');
+      }
+    };
+
+    getCameraPermission();
+  }, []);
+
 
   const handleVideoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -33,35 +57,41 @@ export default function Home() {
 
   const handleProcessVideo = useCallback(async () => {
     if (!videoFile) {
-      alert("Please upload a video first.");
+      setError("Please upload a video first.");
       return;
     }
 
-    // Simulate processing the video and getting bullet data
-    // Replace this with actual API call to your Flask backend
-    const simulatedBulletData: BulletData[] = [
-      {
-        bullet_id: "bullet_1",
-        bounding_box: [100, 100, 150, 150],
-        position: [125, 125],
-        speed_kmh: 150.0,
-        direction: "Right",
-      },
-      {
-        bullet_id: "bullet_2",
-        bounding_box: [200, 200, 250, 250],
-        position: [225, 225],
-        speed_kmh: 180.0,
-        direction: "Left",
-      },
-    ];
+    setProcessing(true);
+    setError(null);
 
-    setBulletData(simulatedBulletData);
+    const formData = new FormData();
+    formData.append("video", videoFile);
+    formData.append("confidence_threshold", confidenceThreshold.toString());
+    formData.append("iou_threshold", iouThreshold.toString());
 
-    if (videoRef.current) {
-      videoRef.current.play();
+    try {
+      const response = await fetch("/api/process_video", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setBulletData(data);
+
+      if (videoRef.current) {
+        videoRef.current.play();
+      }
+    } catch (e: any) {
+      console.error("Error processing video:", e);
+      setError(`Failed to process video: ${e.message}`);
+    } finally {
+      setProcessing(false);
     }
-  }, [videoFile]);
+  }, [videoFile, confidenceThreshold, iouThreshold]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-bullettrack-primary text-foreground p-4">
@@ -71,6 +101,12 @@ export default function Home() {
           <CardDescription>Upload a video and track bullets in real-time.</CardDescription>
         </CardHeader>
         <CardContent className="p-4">
+        {error && (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <div className="mb-4">
             <Input type="file" accept="video/*" onChange={handleVideoUpload} className="mb-2" />
             {videoUrl && (
@@ -78,8 +114,12 @@ export default function Home() {
             )}
           </div>
           <div className="mb-4">
-            <Button onClick={handleProcessVideo} className="bg-bullettrack-accent text-foreground hover:bg-teal-700">
-              Process Video
+            <Button
+              onClick={handleProcessVideo}
+              className="bg-bullettrack-accent text-foreground hover:bg-teal-700"
+              disabled={processing}
+            >
+              {processing ? "Processing..." : "Process Video"}
             </Button>
           </div>
           <div className="mb-4">
@@ -135,6 +175,7 @@ export default function Home() {
           </div>
         </CardContent>
       </Card>
+      
     </div>
   );
 }
